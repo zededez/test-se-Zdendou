@@ -175,11 +175,27 @@ function drawChart() {
   svg.innerHTML = g;
 }
 
+// GitHub API vrací čerstvá data (limit 60 dotazů/h na IP); raw.githubusercontent.com
+// drží kopii až 5 min. Při vyčerpání limitu přepneme na raw do resetu limitu.
+const API_URL = 'https://api.github.com/repos/zededez/test-se-Zdendou/contents/data.json?ref=data';
+let apiBlockedUntil = 0;
+async function fetchData() {
+  if (Date.now() > apiBlockedUntil) {
+    try {
+      const r = await fetch(API_URL, { cache: 'no-cache', headers: { Accept: 'application/vnd.github.raw+json' } });
+      if (r.ok) return r.json();
+      const reset = Number(r.headers.get('x-ratelimit-reset'));
+      apiBlockedUntil = reset ? reset * 1000 : Date.now() + 15 * 60e3;
+    } catch (e) { apiBlockedUntil = Date.now() + 5 * 60e3; }
+  }
+  const r = await fetch(`${DATA_URL}?t=${Date.now()}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
 async function loadLocal() {
   try {
-    const r = await fetch(`${DATA_URL}?t=${Date.now()}`, { cache: 'no-store' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const j = await r.json();
+    const j = await fetchData();
     for (const k of ['praha', 'frydlant']) {
       const s = j.stations && j.stations[k];
       state[k] = s && s.temp != null ? s : null;
