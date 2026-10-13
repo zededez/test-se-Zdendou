@@ -119,9 +119,43 @@ def parse_fr(t):
     return d
 
 
+def parse_fr_series(raw, now=None):
+    """Dnešní řada teplot z grafu na stránce (const labels / const dataTemp), po 5 min od půlnoci."""
+    lab = re.search(r"const\s+labels\s*=\s*\[([^\]]*)\]", raw)
+    tmp = re.search(r"const\s+dataTemp\s*=\s*\[([^\]]*)\]", raw)
+    if not (lab and tmp):
+        return []
+    labels = re.findall(r"(\d{1,2}):(\d{2})", lab.group(1))
+    temps = [num(x) for x in tmp.group(1).split(",")]
+    if len(labels) != len(temps):
+        return []
+    now = now or datetime.now(TZ)
+    out = []
+    for (hh, mi), t in zip(labels, temps):
+        ts = now.replace(hour=int(hh), minute=int(mi), second=0, microsecond=0)
+        if t is not None and ts <= now + timedelta(minutes=2):
+            out.append([ts.isoformat(), t])
+    return out
+
+
+def merge_history(h, series, min_gap_s=HISTORY_STEP_S):
+    """Sloučí body podle času, body bližší než min_gap_s k existujícímu bodu přeskočí."""
+    pts = {p[0]: p for p in h}
+    times = sorted(datetime.fromisoformat(p[0]) for p in h)
+    for ts, t in series:
+        dt = datetime.fromisoformat(ts)
+        if all(abs((dt - x).total_seconds()) >= min_gap_s for x in times):
+            pts[ts] = [ts, t]
+            times.append(dt)
+    return sorted(pts.values(), key=lambda p: datetime.fromisoformat(p[0]))
+
+
 def scrape_one(key, url, parser, encoding=None):
     try:
-        d = parser(to_text(fetch(url, encoding)))
+        raw = fetch(url, encoding)
+        d = parser(to_text(raw))
+        if key == "frydlant":
+            d["_series"] = parse_fr_series(raw)
         d["ok"] = d.get("temp") is not None
         if not d["ok"]:
             d["error"] = "teplotu se nepodařilo najít (změnila se stránka?)"
@@ -148,6 +182,9 @@ def update(state):
         ("frydlant", FR_URL, parse_fr, None),
     ):
         new = scrape_one(key, url, parser, enc)
+        series = new.pop("_series", [])
+        if series:
+            history[key] = merge_history(history.get(key, []), series)
         if new["ok"]:
             stations[key] = new
             h = history.setdefault(key, [])

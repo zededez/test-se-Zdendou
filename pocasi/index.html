@@ -47,6 +47,8 @@
   .badge.warn { background: var(--warnbg); color: var(--warn); }
   .badge.bad { background: var(--badbg); color: var(--bad); }
   .temp { font-size: 64px; font-weight: 300; letter-spacing: -.03em; line-height: 1.05; margin: 14px 0 2px; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .temp.flash { animation: flash 1.2s ease-out; }
+  @keyframes flash { 0% { color: var(--c); } 100% { color: var(--ink); } }
   .temp small { font-size: 26px; color: var(--ink2); margin-left: 2px; vertical-align: 26px; }
   .minmax { font-size: 13px; color: var(--ink2); font-variant-numeric: tabular-nums; min-height: 19px; }
   .minmax b { color: var(--ink); font-weight: 500; }
@@ -69,7 +71,7 @@
 <div class="wrap">
   <header>
     <h1>Teploty živě</h1>
-    <div class="meta"><span id="clock">—</span> · obnova za <span id="cd">60</span> s<button id="now" type="button">Obnovit</button></div>
+    <div class="meta"><span id="clock">—</span> · obnoveno <span id="last">—</span> · další za <span id="cd">60</span> s<button id="now" type="button">Obnovit</button></div>
   </header>
 
   <div class="grid" id="grid"></div>
@@ -113,6 +115,7 @@ function ageBadge(measured, maxOkMin) {
   return [min <= maxOkMin ? 'ok' : min <= 60 ? 'warn' : 'bad', txt];
 }
 
+let flash = false;
 function card(st) {
   const d = state[st.key];
   const err = state.errors[st.key];
@@ -126,7 +129,7 @@ function card(st) {
   return `<article class="card" style="--c:${st.color}">
     <div class="top"><div><div class="name">${st.name}</div><div class="sub">${st.sub}</div></div>
       <span class="badge ${cls}" title="${d && d.measured ? 'měřeno ' + new Date(d.measured).toLocaleString('cs-CZ') : ''}">${age}</span></div>
-    <div class="temp">${d ? fmt(d.temp) : '—'}<small>°C</small></div>
+    <div class="temp${flash ? ' flash' : ''}">${d ? fmt(d.temp) : '—'}<small>°C</small></div>
     <div class="minmax">${d && (d.tmin != null || d.tmax != null) ? `dnes min <b>${fmt(d.tmin)}</b> · max <b>${fmt(d.tmax)}</b> °C` : ''}</div>
     <div class="stats">
       <div class="stat">Vlhkost<div>${d ? fmt(d.humidity,0) : '—'} %</div></div>
@@ -141,7 +144,12 @@ function card(st) {
 
 function render() {
   $('#grid').innerHTML = STATIONS.map(card).join('');
-  $('#legend').innerHTML = STATIONS.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
+  $('#legend').innerHTML = STATIONS.map(s => {
+    const h = state.history[s.key] || [];
+    const from = h.length ? new Date(h[0][0]) : null;
+    const partial = from && Date.now() - from > 0 && Date.now() - from < 23 * 3600e3;
+    return `<span><i style="background:${s.color}"></i>${s.name}${partial ? ` <span style="color:var(--ink3)">(data od ${hm(from)})</span>` : ''}</span>`;
+  }).join('');
   drawChart();
 }
 
@@ -166,7 +174,8 @@ function drawChart() {
     g += `<line x1="${x(t)}" x2="${x(t)}" y1="${T}" y2="${H-B}" stroke="var(--line)"/><text x="${x(t)}" y="${H-6}" text-anchor="middle">${d.getHours()}:00</text>`;
   }
   for (const { s, pts } of series) {
-    if (pts.length < 2) continue;
+    if (!pts.length) continue;
+    if (pts.length < 6) { for (const p of pts) g += `<circle cx="${x(p[0])}" cy="${y(p[1])}" r="2.5" fill="${s.color}"/>`; continue; }
     let d = '', prev = null;
     for (const p of pts) { d += (prev && p[0] - prev[0] > 40 * 60e3 ? 'M' : (d ? 'L' : 'M')) + x(p[0]).toFixed(1) + ',' + y(p[1]).toFixed(1); prev = p; }
     const last = pts[pts.length - 1];
@@ -250,7 +259,10 @@ async function refresh() {
   countdown = REFRESH_S;
   await Promise.all([loadLocal(), loadKitz(cycles % 30 === 0)]); // plná 24h historie Kitzbühelu 1× za 30 min
   cycles++;
+  flash = cycles > 1;
   render();
+  flash = false;
+  $('#last').textContent = new Date().toLocaleTimeString('cs-CZ');
 }
 setInterval(() => {
   $('#clock').textContent = new Date().toLocaleString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
