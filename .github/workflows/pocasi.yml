@@ -1,0 +1,35 @@
+# Stahuje data stanic Praha (Silicon Hill) a Frýdlant každých 60 s
+# a ukládá je do větve `data` (data.json). Kitzbühel čte stránka přímo z GeoSphere.
+#
+# GitHub cron spouští běh nejdřív každých 5 min a v praxi se zpožďuje.
+# Proto každý běh sám ve smyčce stahuje 1× za minutu po dobu ~25 min
+# a nový běh (každých 15 min) ten starý nahradí -> souvislé pokrytí i při zpoždění.
+name: pocasi-scraper
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: pocasi-scraper
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: pocasi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Stahovat 25 min, 1x za minutu
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python pocasi/scraper.py --loop 25 --interval 60 --push

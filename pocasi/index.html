@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teploty živě</title>
+<meta name="description" content="Teplota z lokálních stanic: Praha 6 Silicon Hill, Frýdlant v Čechách, Kitzbühel. Obnova každou minutu.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='13' y='3' width='6' height='18' rx='3' fill='%23d9480f'/%3E%3Ccircle cx='16' cy='24' r='6' fill='%23d9480f'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f4f3ef; --card: #ffffff; --ink: #1c1b18; --ink2: #6b6a64; --ink3: #9a988f;
+    --line: rgba(0,0,0,.08); --chip: #f0efe9;
+    --praha: #c2410c; --frydlant: #1d6fb8; --kitz: #15803d;
+    --ok: #3f7d1f; --okbg: #e6f2dc; --warn: #a15c00; --warnbg: #fbefd9; --bad: #a32d2d; --badbg: #fbe5e5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141413; --card: #1f1e1c; --ink: #f1efe8; --ink2: #a8a69d; --ink3: #77756d;
+      --line: rgba(255,255,255,.09); --chip: #2a2926;
+      --praha: #fb8a4c; --frydlant: #64a8ec; --kitz: #4cc27a;
+      --ok: #9bd178; --okbg: #263321; --warn: #f2bd5c; --warnbg: #3a2f1a; --bad: #f19a9a; --badbg: #3d2222;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141413; --card: #1f1e1c; --ink: #f1efe8; --ink2: #a8a69d; --ink3: #77756d;
+    --line: rgba(255,255,255,.09); --chip: #2a2926;
+    --praha: #fb8a4c; --frydlant: #64a8ec; --kitz: #4cc27a;
+    --ok: #9bd178; --okbg: #263321; --warn: #f2bd5c; --warnbg: #3a2f1a; --bad: #f19a9a; --badbg: #3d2222;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px 16px 40px; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin-bottom: 18px; }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+  .meta { font-size: 13px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+  .meta button { font: inherit; color: var(--ink2); background: var(--chip); border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; margin-left: 8px; cursor: pointer; }
+  .meta button:hover { color: var(--ink); }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 14px; position: relative; overflow: hidden; }
+  .card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c); }
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .name { font-weight: 600; font-size: 15px; }
+  .sub { font-size: 12px; color: var(--ink3); }
+  .badge { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: var(--chip); color: var(--ink2); }
+  .badge.ok { background: var(--okbg); color: var(--ok); }
+  .badge.warn { background: var(--warnbg); color: var(--warn); }
+  .badge.bad { background: var(--badbg); color: var(--bad); }
+  .temp { font-size: 64px; font-weight: 300; letter-spacing: -.03em; line-height: 1.05; margin: 14px 0 2px; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .temp small { font-size: 26px; color: var(--ink2); margin-left: 2px; vertical-align: 26px; }
+  .minmax { font-size: 13px; color: var(--ink2); font-variant-numeric: tabular-nums; min-height: 19px; }
+  .minmax b { color: var(--ink); font-weight: 500; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .stat { font-size: 12px; color: var(--ink3); }
+  .stat div { font-size: 15px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .extra { margin-top: 10px; font-size: 12px; color: var(--ink2); min-height: 18px; }
+  .foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--ink3); }
+  .foot a { color: var(--ink3); }
+  .chart { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-top: 14px; }
+  .chart h2 { font-size: 14px; font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--ink2); margin: 4px 0 8px; }
+  .legend i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  svg text { fill: var(--ink3); font-size: 11px; font-family: inherit; }
+  .note { margin-top: 16px; font-size: 12px; color: var(--ink3); line-height: 1.6; }
+  .err { color: var(--bad); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Teploty živě</h1>
+    <div class="meta"><span id="clock">—</span> · obnova za <span id="cd">60</span> s<button id="now" type="button">Obnovit</button></div>
+  </header>
+
+  <div class="grid" id="grid"></div>
+
+  <section class="chart">
+    <h2>Teplota za posledních 24 hodin</h2>
+    <div class="legend" id="legend"></div>
+    <svg id="svg" width="100%" height="230" role="img" aria-label="Graf teploty za 24 hodin"></svg>
+  </section>
+
+  <p class="note">
+    Praha 6 – Silicon Hill (Strahov) a Frýdlant v Čechách: lokální stanice, data stahuje GitHub Action každou minutu.
+    Frýdlantská stanice sama posílá data po 5 minutách, oficiální rakouská síť TAWES (Kitzbühel) po 10 minutách – častěji to novější být nemůže.
+    Štítek u každé stanice ukazuje, jak stará je poslední hodnota.
+  </p>
+</div>
+
+<script>
+const REFRESH_S = 60;
+const DATA_URL = 'https://raw.githubusercontent.com/zededez/test-se-Zdendou/data/data.json';
+const GS = 'https://dataset.api.hub.geosphere.at/v1/station';
+const KITZ = '11279', HAHN = '11135';
+
+const STATIONS = [
+  { key: 'praha', name: 'Praha 6 – Silicon Hill', sub: 'Strahov · lokální stanice', color: 'var(--praha)', link: 'https://weather.sh.cvut.cz/weather/', linkTxt: 'weather.sh.cvut.cz' },
+  { key: 'frydlant', name: 'Frýdlant v Čechách', sub: 'Předměstí · lokální stanice', color: 'var(--frydlant)', link: 'https://www.pocasi-frydlant.cz/frydlant.php', linkTxt: 'pocasi-frydlant.cz' },
+  { key: 'kitz', name: 'Kitzbühel', sub: 'stanice GeoSphere · 772 m n. m.', color: 'var(--kitz)', link: 'https://www.geosphere.at/', linkTxt: 'GeoSphere Austria' },
+];
+const state = { praha: null, frydlant: null, kitz: null, history: {}, errors: {} };
+
+const $ = s => document.querySelector(s);
+const fmt = (v, d = 1) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('cs-CZ', { minimumFractionDigits: d, maximumFractionDigits: d });
+const hm = d => d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+const DIRS = ['S','SSV','SV','VSV','V','VJV','JV','JJV','J','JJZ','JZ','ZJZ','Z','ZSZ','SZ','SSZ'];
+const deg2dir = d => d == null ? null : DIRS[Math.round(((d % 360) / 22.5)) % 16];
+
+function ageBadge(measured, maxOkMin) {
+  if (!measured) return ['bad', 'čas neznámý'];
+  const min = Math.round((Date.now() - new Date(measured)) / 60000);
+  const txt = min < 1 ? 'právě teď' : min < 60 ? `před ${min} min` : min < 1440 ? `před ${Math.floor(min/60)} h ${min%60} min` : `před ${Math.floor(min/1440)} dny`;
+  return [min <= maxOkMin ? 'ok' : min <= 60 ? 'warn' : 'bad', txt];
+}
+
+function card(st) {
+  const d = state[st.key];
+  const err = state.errors[st.key];
+  const maxOk = st.key === 'kitz' ? 25 : st.key === 'frydlant' ? 12 : 5;
+  const [cls, age] = d ? ageBadge(d.measured, maxOk) : ['', 'načítám…'];
+  const wind = d && d.wind_kmh != null ? `${fmt(d.wind_kmh)} km/h${d.wind_dir ? ' ' + d.wind_dir : ''}` : '—';
+  const gust = d && d.gust_kmh != null ? `<span style="color:var(--ink3);font-size:12px;display:block">nárazy ${fmt(d.gust_kmh,0)} km/h</span>` : '';
+  let extra = '';
+  if (st.key === 'kitz' && d && d.hahn != null) extra = `Hahnenkamm (Ehrenbachhöhe, 1794 m): <b>${fmt(d.hahn)} °C</b>`;
+  if (err) extra = `<span class="err">${err}</span>`;
+  return `<article class="card" style="--c:${st.color}">
+    <div class="top"><div><div class="name">${st.name}</div><div class="sub">${st.sub}</div></div>
+      <span class="badge ${cls}" title="${d && d.measured ? 'měřeno ' + new Date(d.measured).toLocaleString('cs-CZ') : ''}">${age}</span></div>
+    <div class="temp">${d ? fmt(d.temp) : '—'}<small>°C</small></div>
+    <div class="minmax">${d && (d.tmin != null || d.tmax != null) ? `dnes min <b>${fmt(d.tmin)}</b> · max <b>${fmt(d.tmax)}</b> °C` : ''}</div>
+    <div class="stats">
+      <div class="stat">Vlhkost<div>${d ? fmt(d.humidity,0) : '—'} %</div></div>
+      <div class="stat">Vítr<div>${wind}${gust}</div></div>
+      <div class="stat">${st.key === 'kitz' ? 'Tlak (na stanici)' : 'Tlak'}<div>${d ? fmt(d.pressure,1) : '—'} hPa</div></div>
+      <div class="stat">Srážky dnes<div>${d ? fmt(d.rain_today,1) : '—'} mm</div></div>
+    </div>
+    <div class="extra">${extra}</div>
+    <div class="foot"><span>${d && d.measured ? 'měřeno ' + hm(new Date(d.measured)) : ''}</span><a href="${st.link}" target="_blank" rel="noopener">${st.linkTxt} ↗</a></div>
+  </article>`;
+}
+
+function render() {
+  $('#grid').innerHTML = STATIONS.map(card).join('');
+  $('#legend').innerHTML = STATIONS.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
+  drawChart();
+}
+
+function drawChart() {
+  const svg = $('#svg');
+  const W = svg.clientWidth || 600, H = 230, L = 34, R = 10, T = 10, B = 24;
+  const t1 = Date.now(), t0 = t1 - 24 * 3600e3;
+  const series = STATIONS.map(s => ({ s, pts: (state.history[s.key] || []).map(([t, v]) => [new Date(t).getTime(), v]).filter(p => p[0] >= t0 && p[1] != null) }));
+  const all = series.flatMap(x => x.pts.map(p => p[1]));
+  if (!all.length) { svg.innerHTML = `<text x="${L}" y="${H/2}">Historie se načítá…</text>`; return; }
+  let lo = Math.floor(Math.min(...all)) - 1, hi = Math.ceil(Math.max(...all)) + 1;
+  const step = hi - lo > 20 ? 5 : hi - lo > 8 ? 2 : 1;
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  const x = t => L + (t - t0) / (t1 - t0) * (W - L - R);
+  const y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  let g = '';
+  for (let v = lo; v <= hi; v += step) g += `<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}°</text>`;
+  const h0 = new Date(t0); h0.setMinutes(0, 0, 0);
+  for (let t = h0.getTime() + 3600e3; t < t1; t += 3600e3) {
+    const d = new Date(t);
+    if (d.getHours() % (W < 560 ? 6 : 3)) continue;
+    g += `<line x1="${x(t)}" x2="${x(t)}" y1="${T}" y2="${H-B}" stroke="var(--line)"/><text x="${x(t)}" y="${H-6}" text-anchor="middle">${d.getHours()}:00</text>`;
+  }
+  for (const { s, pts } of series) {
+    if (pts.length < 2) continue;
+    let d = '', prev = null;
+    for (const p of pts) { d += (prev && p[0] - prev[0] > 40 * 60e3 ? 'M' : (d ? 'L' : 'M')) + x(p[0]).toFixed(1) + ',' + y(p[1]).toFixed(1); prev = p; }
+    const last = pts[pts.length - 1];
+    g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${x(last[0])}" cy="${y(last[1])}" r="3.5" fill="${s.color}"/>`;
+  }
+  svg.innerHTML = g;
+}
+
+async function loadLocal() {
+  try {
+    const r = await fetch(`${DATA_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    for (const k of ['praha', 'frydlant']) {
+      const s = j.stations && j.stations[k];
+      state[k] = s && s.temp != null ? s : null;
+      state.errors[k] = s && s.ok === false ? 'Stanice teď neodpovídá – zobrazuji poslední známá data.' : null;
+      state.history[k] = (j.history && j.history[k]) || [];
+    }
+  } catch (e) {
+    for (const k of ['praha', 'frydlant']) state.errors[k] = 'Data se nepodařilo načíst (' + e.message + ').';
+  }
+}
+
+async function loadKitz(withHistory) {
+  try {
+    const p = 'TL,RF,FF,FFX,DD,P,RR';
+    const cur = await (await fetch(`${GS}/current/tawes-v1-10min?parameters=${p}&station_ids=${KITZ},${HAHN}`, { cache: 'no-store' })).json();
+    const f = id => cur.features.find(x => x.properties.station === id)?.properties.parameters;
+    const k = f(KITZ), hh = f(HAHN);
+    const v = (o, n) => o && o[n] ? o[n].data[0] : null;
+    const prev = state.kitz || {};
+    state.kitz = {
+      measured: cur.timestamps[0], temp: v(k, 'TL'), humidity: v(k, 'RF'),
+      wind_kmh: v(k, 'FF') != null ? v(k, 'FF') * 3.6 : null, gust_kmh: v(k, 'FFX') != null ? v(k, 'FFX') * 3.6 : null,
+      wind_dir: deg2dir(v(k, 'DD')), pressure: v(k, 'P'), hahn: v(hh, 'TL'),
+      tmin: prev.tmin, tmax: prev.tmax, rain_today: prev.rain_today,
+    };
+    if (withHistory) {
+      const end = new Date(), start = new Date(end - 25 * 3600e3);
+      const iso = d => d.toISOString().slice(0, 16);
+      const h = await (await fetch(`${GS}/historical/tawes-v1-10min?parameters=TL,TLMIN,TLMAX,RR&station_ids=${KITZ}&start=${iso(start)}&end=${iso(end)}`)).json();
+      const pr = h.features[0].properties.parameters;
+      state.history.kitz = h.timestamps.map((t, i) => [t, pr.TL.data[i]]);
+      const mid = new Date(); mid.setHours(0, 0, 0, 0);
+      const idx = h.timestamps.map((t, i) => [new Date(t), i]).filter(([t]) => t > mid).map(([, i]) => i);
+      const nums = a => a.filter(x => x != null);
+      const mins = nums(idx.map(i => pr.TLMIN.data[i])), maxs = nums(idx.map(i => pr.TLMAX.data[i]));
+      state.kitz.tmin = mins.length ? Math.min(...mins) : null;
+      state.kitz.tmax = maxs.length ? Math.max(...maxs) : null;
+      state.kitz.rain_today = nums(idx.map(i => pr.RR.data[i])).reduce((a, b) => a + b, 0);
+    } else {
+      const t = state.kitz.temp, last = (state.history.kitz || []).slice(-1)[0];
+      if (t != null && (!last || last[0] !== cur.timestamps[0])) (state.history.kitz ||= []).push([cur.timestamps[0], t]);
+      if (t != null) { state.kitz.tmin = Math.min(state.kitz.tmin ?? t, t); state.kitz.tmax = Math.max(state.kitz.tmax ?? t, t); }
+    }
+    state.errors.kitz = null;
+  } catch (e) {
+    state.errors.kitz = 'GeoSphere teď neodpovídá (' + e.message + ').';
+  }
+}
+
+let countdown = REFRESH_S, cycles = 0;
+async function refresh() {
+  countdown = REFRESH_S;
+  await Promise.all([loadLocal(), loadKitz(cycles % 30 === 0)]); // plná 24h historie Kitzbühelu 1× za 30 min
+  cycles++;
+  render();
+}
+setInterval(() => {
+  $('#clock').textContent = new Date().toLocaleString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if (--countdown <= 0) refresh();
+  $('#cd').textContent = Math.max(countdown, 0);
+}, 1000);
+$('#now').onclick = refresh;
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+window.addEventListener('resize', drawChart);
+render();
+refresh();
+</script>
+</body>
+</html>
