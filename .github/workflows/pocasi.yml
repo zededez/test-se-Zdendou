@@ -1,27 +1,30 @@
 # Stahuje data stanic Praha (Silicon Hill) a Frýdlant každých 60 s
 # a ukládá je do větve `data` (data.json). Kitzbühel čte stránka přímo z GeoSphere.
 #
-# GitHub cron spouští běh nejdřív každých 5 min a v praxi se zpožďuje.
-# Proto každý běh sám ve smyčce stahuje 1× za minutu po dobu ~25 min
-# a nový běh (každých 15 min) ten starý nahradí -> souvislé pokrytí i při zpoždění.
+# Proč řetěz: GitHub cron ve skutečnosti nespouští běhy každých 15 min, ale
+# nepravidelně po 2–6 hodinách. Proto každý běh stahuje ~5 h 40 min a na konci
+# sám spustí další běh (workflow_dispatch). Cron slouží jen jako pojistka,
+# která řetěz znovu nahodí, kdyby se přerušil.
 name: pocasi-scraper
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7,37 * * * *"
   workflow_dispatch:
 
+# Žádné rušení běžícího běhu – nový počká ve frontě (max. 1 čekající).
 concurrency:
   group: pocasi-scraper
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,7 +32,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Stahovat 25 min, 1x za minutu
+      - name: Stahovat ~5 h 40 min, 1x za minutu
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python pocasi/scraper.py --loop 25 --interval 60 --push
+        run: python pocasi/scraper.py --loop 340 --interval 60 --push
+      - name: Spustit navazující běh
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run pocasi.yml --repo "$GITHUB_REPOSITORY" --ref main
